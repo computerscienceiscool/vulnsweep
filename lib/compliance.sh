@@ -391,7 +391,7 @@ lines.append("|---------|-----------|----------|------------|----------|--------
 
 for p in sorted(projects, key=lambda x: x["project"]):
     name = p["project"]
-    report_link = f"[{name}]({name}-compliance-report.md)"
+    report_link = f"[{name}](compliance/{name}-compliance-report.md)"
 
     if p["restricted"] > 0:
         status = "❌ ACTION"

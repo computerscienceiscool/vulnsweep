@@ -97,7 +97,7 @@ security-audit/
 │   ├── compliance/
 │   │   ├── my-project-compliance-report.md     # Per-project compliance report
 │   │   ├── my-project-compliance-summary.json  # Machine-readable summary
-│   │   └── portfolio-compliance-summary.md     # Portfolio-wide compliance
+│   ├── portfolio-compliance-summary.md         # Portfolio-wide compliance
 │   ├── portfolio-summary.md             # Status table across all projects
 │   └── changelog.md                     # What changed since last scan
 ├── 030226-2/                            # Second scan same day
@@ -125,7 +125,7 @@ Status table across all projects showing PASS/WARN/FAIL, vulnerability counts by
 **Per-project compliance report** (`compliance/<name>-compliance-report.md`)
 Checks the project's SBOM against the compliance policy. Reports banned licenses, blocked packages, and required dependency violations.
 
-**Portfolio compliance summary** (`compliance/portfolio-compliance-summary.md`)
+**Portfolio compliance summary** (`portfolio-compliance-summary.md`)
 Aggregated compliance status across all projects.
 
 **Changelog** (`changelog.md`)

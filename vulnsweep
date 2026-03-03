@@ -186,7 +186,7 @@ main() {
     # Generate portfolio compliance summary
     if [[ -d "$compliance_dir" ]] && ls "$compliance_dir"/*-compliance-summary.json >/dev/null 2>&1; then
         echo "Generating compliance summary..."
-        generate_compliance_summary "$scan_dir" "$compliance_dir/portfolio-compliance-summary.md"
+        generate_compliance_summary "$scan_dir" "$scan_dir/portfolio-compliance-summary.md"
     fi
 
     # Generate changelog (diff against previous scan)

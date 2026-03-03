@@ -142,6 +142,10 @@ generate_summary() {
         fi
 
         echo ""
+        echo "## Licensing Overview"
+        echo ""
+        echo "For a full breakdown of license compliance across all scanned projects — including restricted, copyleft, unknown, and missing licenses — see the [Portfolio Compliance Summary](portfolio-compliance-summary.md)."
+        echo ""
         echo "## Recommendations"
         echo ""
         if (( fail_count > 0 )); then
