@@ -102,16 +102,14 @@ main() {
         fi
     fi
 
-    # Create date-stamped output directory (append run number if folder exists)
+    # Create date-stamped output directory (always includes run number)
     local scan_date
     scan_date=$(date +%m%d%y)
-    local scan_dir="$output_base/$scan_date"
-    if [[ -d "$scan_dir" ]]; then
-        local run=2
-        while [[ -d "$output_base/${scan_date}-${run}" ]]; do
-            run=$((run + 1))
-        done
-        scan_dir="$output_base/${scan_date}-${run}"
+    local run=1
+    while [[ -d "$output_base/${scan_date}-${run}" ]]; do
+        run=$((run + 1))
+    done
+    local scan_dir="$output_base/${scan_date}-${run}"
     fi
     local sbom_dir="$scan_dir/SBOM"
     local vuln_dir="$scan_dir/vulnerability-scans"
