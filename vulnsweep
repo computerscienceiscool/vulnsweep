@@ -1,0 +1,254 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# vulnsweep — Portfolio vulnerability scanner
+# Scans remote repos directly via Trivy (no local cloning).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+source "$SCRIPT_DIR/lib/config.sh"
+source "$SCRIPT_DIR/lib/repo.sh"
+source "$SCRIPT_DIR/lib/scan.sh"
+source "$SCRIPT_DIR/lib/report.sh"
+source "$SCRIPT_DIR/lib/summary.sh"
+source "$SCRIPT_DIR/lib/changelog.sh"
+
+usage() {
+    cat <<'EOF'
+Usage: vulnsweep [OPTIONS] <config-file>
+
+Portfolio vulnerability scanner powered by Trivy.
+Scans repos remotely by URL — nothing is cloned to disk.
+
+Options:
+  -h, --help       Show this help message
+  -v, --verbose    Verbose output
+
+Examples:
+  vulnsweep portfolio-scanner.yaml
+EOF
+    exit 0
+}
+
+main() {
+    local config_file=""
+    local verbose=0
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help) usage ;;
+            -v|--verbose) verbose=1; shift ;;
+            -*) echo "Unknown option: $1" >&2; usage ;;
+            *) config_file="$1"; shift ;;
+        esac
+    done
+
+    if [[ -z "$config_file" ]]; then
+        echo "ERROR: Config file required." >&2
+        echo "Usage: vulnsweep <config-file>" >&2
+        exit 1
+    fi
+
+    # Check dependencies
+    for cmd in trivy git jq python3; do
+        if ! command -v "$cmd" >/dev/null 2>&1; then
+            echo "ERROR: Required command not found: $cmd" >&2
+            exit 1
+        fi
+    done
+
+    echo "=== vulnsweep ==="
+    echo ""
+
+    # Parse config
+    echo "Reading config: $config_file"
+    local config_json
+    config_json=$(parse_config "$config_file")
+    if [[ $? -ne 0 ]] || [[ -z "$config_json" ]]; then
+        echo "ERROR: Failed to parse config file" >&2
+        exit 1
+    fi
+
+    local output_base
+    output_base=$(get_output_dir "$config_json")
+
+    local repo_count
+    repo_count=$(get_repo_count "$config_json")
+    echo "Repos: $repo_count"
+
+    # Resolve output_base to absolute path relative to config file location
+    if [[ "$output_base" != /* ]]; then
+        output_base="$(cd "$(dirname "$config_file")" && pwd)/$output_base"
+    fi
+
+    # If git is enabled and output dir doesn't exist, shallow clone the results repo
+    local git_enabled
+    git_enabled=$(get_git_enabled "$config_json")
+    if [[ "$git_enabled" == "true" ]] && [[ ! -d "$output_base/.git" ]]; then
+        local remote
+        remote=$(get_git_remote "$config_json")
+        if [[ -n "$remote" ]]; then
+            echo "Fetching results repo (shallow)..."
+            if ! git clone --depth 1 --quiet "$remote" "$output_base" 2>&1; then
+                echo "WARNING: Could not fetch results repo, starting fresh" >&2
+                mkdir -p "$output_base"
+                git -C "$output_base" init --quiet
+                git -C "$output_base" remote add origin "$remote" 2>/dev/null || true
+            fi
+        else
+            mkdir -p "$output_base"
+            git -C "$output_base" init --quiet
+        fi
+    fi
+
+    # Create date-stamped output directory (append run number if folder exists)
+    local scan_date
+    scan_date=$(date +%m%d%y)
+    local scan_dir="$output_base/$scan_date"
+    if [[ -d "$scan_dir" ]]; then
+        local run=2
+        while [[ -d "$output_base/${scan_date}-${run}" ]]; do
+            run=$((run + 1))
+        done
+        scan_dir="$output_base/${scan_date}-${run}"
+    fi
+    local sbom_dir="$scan_dir/SBOM"
+    local vuln_dir="$scan_dir/vulnerability-scans"
+
+    mkdir -p "$sbom_dir" "$vuln_dir"
+
+    echo "Output: $scan_dir"
+    echo ""
+
+    # Track scan results for exit code
+    local has_critical_high=0
+    local failed_repos=0
+
+    # Process each repo
+    for (( i=0; i<repo_count; i++ )); do
+        local name url
+        name=$(get_repo_name "$config_json" "$i")
+        url=$(get_repo_url "$config_json" "$i")
+
+        echo "[$((i+1))/$repo_count] $name"
+
+        # Scan remote repo directly (no cloning)
+        if ! scan_repo "$name" "$url" "$sbom_dir" "$vuln_dir"; then
+            echo "  SKIPPED (scan failed)"
+            failed_repos=$((failed_repos + 1))
+            echo ""
+            continue
+        fi
+
+        # Generate per-project report
+        local json_file="$vuln_dir/${name}-trivy.json"
+        local fmt_report
+        fmt_report=$(get_format_flag "$config_json" "project_report")
+        if [[ "$fmt_report" == "true" ]] && [[ -f "$json_file" ]]; then
+            echo "  Generating report..."
+            generate_report "$name" "$json_file" "$vuln_dir/${name}-vulnerability-report.md" "$url"
+        fi
+
+        # Check for critical/high
+        if [[ -f "$json_file" ]]; then
+            local crit high
+            crit=$(jq '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' "$json_file")
+            high=$(jq '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH")] | length' "$json_file")
+            if (( crit > 0 || high > 0 )); then
+                has_critical_high=1
+            fi
+        fi
+
+        echo ""
+    done
+
+    # Generate portfolio summary
+    local fmt_summary
+    fmt_summary=$(get_format_flag "$config_json" "portfolio_summary")
+    if [[ "$fmt_summary" == "true" ]]; then
+        echo "Generating portfolio summary..."
+        generate_summary "$scan_dir" "$scan_dir/portfolio-summary.md" "$config_json"
+    fi
+
+    # Generate changelog (diff against previous scan)
+    local fmt_changelog
+    fmt_changelog=$(get_format_flag "$config_json" "changelog")
+    local latest_link="$output_base/latest"
+
+    if [[ "$fmt_changelog" == "true" ]]; then
+        if [[ -L "$latest_link" ]] && [[ -d "$(readlink -f "$latest_link")" ]]; then
+            local previous_dir
+            previous_dir=$(readlink -f "$latest_link")
+            if [[ "$previous_dir" != "$scan_dir" ]]; then
+                echo "Generating changelog (vs $(basename "$previous_dir"))..."
+                generate_changelog "$scan_dir" "$previous_dir" "$scan_dir/changelog.md"
+            fi
+        else
+            echo "No previous scan found, skipping changelog."
+        fi
+    fi
+
+    # Update latest symlink
+    ln -sfn "$scan_dir" "$latest_link"
+
+    # Git commit/push if enabled
+    local git_enabled
+    git_enabled=$(get_git_enabled "$config_json")
+    if [[ "$git_enabled" == "true" ]]; then
+        _git_commit_results "$output_base" "$scan_date" "$config_json"
+    fi
+
+    # Summary
+    echo ""
+    echo "=== Scan Complete ==="
+    echo "Output: $scan_dir"
+    echo "Latest: $latest_link -> $scan_dir"
+
+    if (( failed_repos > 0 )); then
+        echo "WARNING: $failed_repos repo(s) failed to scan"
+    fi
+
+    if (( has_critical_high )); then
+        echo "RESULT: CRITICAL or HIGH vulnerabilities found"
+        exit 1
+    else
+        echo "RESULT: No critical or high vulnerabilities"
+        exit 0
+    fi
+}
+
+_git_commit_results() {
+    local output_base="$1"
+    local scan_date="$2"
+    local config_json="$3"
+
+    echo "Committing results to git..."
+
+    # Stage and commit
+    git -C "$output_base" add -A
+    if git -C "$output_base" diff --cached --quiet 2>/dev/null; then
+        echo "  No changes to commit."
+    else
+        git -C "$output_base" commit --quiet -m "Scan results: $scan_date"
+        echo "  Committed."
+
+        # Push if remote is configured
+        local remote
+        remote=$(get_git_remote "$config_json")
+        if [[ -n "$remote" ]]; then
+            # Pull existing content first if needed
+            if git -C "$output_base" fetch origin 2>/dev/null; then
+                if git -C "$output_base" rev-parse origin/main >/dev/null 2>&1; then
+                    git -C "$output_base" rebase --quiet origin/main 2>/dev/null || true
+                fi
+            fi
+            echo "  Pushing to $remote..."
+            if ! git -C "$output_base" push --quiet -u origin HEAD:main 2>&1; then
+                echo "  WARNING: Push failed. Results are committed locally." >&2
+            fi
+        fi
+    fi
+}
+
+main "$@"

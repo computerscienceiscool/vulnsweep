@@ -1,0 +1,61 @@
+# portfolio-scanner.yaml
+
+scanner:
+  tool: trivy
+  version: ">=0.69"
+
+schedule:
+  frequency: daily          # daily | weekly | manual
+  time: "02:00"             # 24-hour format, used for cron generation
+  day: monday               # only used if frequency is weekly
+
+output:
+  directory: ./security-audit
+  formats:
+    sbom: true              # CycloneDX JSON per project
+    project_report: true    # Markdown vulnerability report per project
+    portfolio_summary: true # Consolidated markdown summary
+    changelog: true         # What changed since last scan
+  git:
+    enabled: true
+    remote: https://github.com/computerscienceiscool/security-audit  # optional, omit to commit locally only
+
+repos:
+  # Public GitHub repos
+  - name: collab-awareness
+    url: https://github.com/computerscienceiscool/collab-awareness
+
+  - name: collab-web-editor
+    url: https://github.com/computerscienceiscool/collab-web-editor
+
+  - name: llm-runtime
+    url: https://github.com/computerscienceiscool/llm-runtime
+
+  # stevegt repos (GitHub)
+  - name: grokker
+    url: https://github.com/stevegt/grokker
+
+  - name: godecide
+    url: https://github.com/stevegt/godecide
+
+  - name: grid-cli
+    url: https://github.com/stevegt/grid-cli
+
+  # Gitea (cswg)
+  - name: gdoctools
+    url: https://gitea.t7a.org/cswg/gdoctools
+
+  - name: promisebase
+    url: https://github.com/stevegt/promisebase
+
+  - name: grid-poc
+    url: https://github.com/promisegrid/grid-poc
+
+  - name: decomk
+    url: https://github.com/stevegt/decomk
+
+  - name: mob-consensus
+    url: https://github.com/stevegt/mob-consensus
+
+  - name: viduct
+    url: https://github.com/computerscienceiscool/viduct
