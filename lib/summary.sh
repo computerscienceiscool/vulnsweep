@@ -83,6 +83,32 @@ generate_summary() {
         ' "$json_file" >> "$topdeps_file"
     done
 
+    # Aggregate compliance status from per-project JSONs
+    local compliance_dir="$scan_dir/compliance"
+    local compliance_status="none"
+    local compliance_emoji=""
+    local compliance_label=""
+    if [[ -d "$compliance_dir" ]] && ls "$compliance_dir"/*-compliance-summary.json >/dev/null 2>&1; then
+        local total_restricted total_unknown total_missing
+        total_restricted=$(jq -s '[.[].restricted] | add // 0' "$compliance_dir"/*-compliance-summary.json)
+        total_unknown=$(jq -s '[.[].unknown_license] | add // 0' "$compliance_dir"/*-compliance-summary.json)
+        total_missing=$(jq -s '[.[].missing_license] | add // 0' "$compliance_dir"/*-compliance-summary.json)
+
+        if (( total_restricted > 0 )); then
+            compliance_status="action"
+            compliance_emoji="❌"
+            compliance_label="ACTION REQUIRED"
+        elif (( total_unknown > 0 || total_missing > 0 )); then
+            compliance_status="review"
+            compliance_emoji="⚠️"
+            compliance_label="REVIEW NEEDED"
+        else
+            compliance_status="compliant"
+            compliance_emoji="✅"
+            compliance_label="COMPLIANT"
+        fi
+    fi
+
     {
         echo "# Portfolio Vulnerability Summary"
         echo ""
@@ -97,6 +123,9 @@ generate_summary() {
         echo "| ✅ PASS | $pass_count |"
         echo "| ⚠️ WARN | $warn_count |"
         echo "| ❌ FAIL | $fail_count |"
+        if [[ "$compliance_status" != "none" ]]; then
+            echo "| $compliance_emoji Compliance | $compliance_label |"
+        fi
         echo ""
         echo "## Project Status"
         echo ""
@@ -141,10 +170,14 @@ generate_summary() {
             done
         fi
 
-        echo ""
-        echo "## Licensing Overview"
-        echo ""
-        echo "For a full breakdown of license compliance across all scanned projects — including restricted, copyleft, unknown, and missing licenses — see the [Portfolio Compliance Summary](portfolio-compliance-summary.md)."
+        if [[ "$compliance_status" != "none" ]]; then
+            echo ""
+            echo "## Licensing Overview"
+            echo ""
+            echo "**Compliance Status:** $compliance_emoji $compliance_label"
+            echo ""
+            echo "For a full breakdown of license compliance across all scanned projects — including restricted, copyleft, unknown, and missing licenses — see the [Portfolio Compliance Summary](portfolio-compliance-summary.md)."
+        fi
         echo ""
         echo "## Recommendations"
         echo ""
