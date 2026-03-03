@@ -44,15 +44,8 @@ generate_summary() {
             status="PASS"; emoji="✅"; pass_count=$((pass_count + 1))
         fi
 
-        # Look up repo URL from config for linking
-        local repo_url=""
-        if [[ -n "$config_json" ]]; then
-            repo_url=$(echo "$config_json" | jq -r --arg n "$name" '.repos[]? | select(.name == $n) | .url // empty')
-        fi
-        local name_display="$name"
-        if [[ -n "$repo_url" ]]; then
-            name_display="[$name]($repo_url)"
-        fi
+        # Link to the per-project vulnerability report
+        local name_display="[$name](vulnerability-scans/${name}-vulnerability-report.md)"
 
         project_rows+="| $name_display | $emoji $status | $critical | $high | $medium | $low | $total |\n"
 
