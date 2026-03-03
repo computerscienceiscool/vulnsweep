@@ -110,7 +110,6 @@ main() {
         run=$((run + 1))
     done
     local scan_dir="$output_base/${scan_date}-${run}"
-    fi
     local sbom_dir="$scan_dir/SBOM"
     local vuln_dir="$scan_dir/vulnerability-scans"
 
