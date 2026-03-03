@@ -127,12 +127,32 @@ export_control:
 #     status: "approved | under-review | restricted"
 #     reviewer: "Name"
 #     date: "YYYY-MM-DD"
+#     proof: "Reference to evidence (ticket ID, commit URL, etc.)"
 #
-# Example:
+# Examples:
+#
+#   Package flagged with no license — contacted maintainer, they added MIT:
 #   - name: "some-package"
+#     restriction: "No license — maintainer added MIT on 2026-03-15"
+#     status: "approved"
+#     reviewer: "Jane Doe"
+#     date: "2026-03-15"
+#     proof: "LIC-2026-001"
+#
+#   Package with Commons Clause — still under review:
+#   - name: "another-package"
 #     restriction: "Commons Clause — cannot sell as a service"
 #     status: "under-review"
 #     reviewer: "Jane Doe"
 #     date: "2026-03-01"
+#     proof: "LIC-2026-002"
+#
+#   Package reviewed and blocked — license changed to SSPL:
+#   - name: "bad-package"
+#     restriction: "SSPL as of v4.0 — incompatible with government delivery"
+#     status: "restricted"
+#     reviewer: "Jane Doe"
+#     date: "2026-03-10"
+#     proof: "LIC-2026-003"
 
 use_restrictions: []
