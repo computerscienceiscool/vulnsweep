@@ -16,6 +16,7 @@ output:
     project_report: true    # Markdown vulnerability report per project
     portfolio_summary: true # Consolidated markdown summary
     changelog: true         # What changed since last scan
+    compliance: true        # Per-project and portfolio compliance reports
   git:
     enabled: true
     remote: https://github.com/computerscienceiscool/security-audit  # optional, omit to commit locally only

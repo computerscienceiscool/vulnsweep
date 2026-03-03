@@ -12,6 +12,7 @@ source "$SCRIPT_DIR/lib/scan.sh"
 source "$SCRIPT_DIR/lib/report.sh"
 source "$SCRIPT_DIR/lib/summary.sh"
 source "$SCRIPT_DIR/lib/changelog.sh"
+source "$SCRIPT_DIR/lib/compliance.sh"
 
 usage() {
     cat <<'EOF'
@@ -113,7 +114,8 @@ main() {
     local sbom_dir="$scan_dir/SBOM"
     local vuln_dir="$scan_dir/vulnerability-scans"
 
-    mkdir -p "$sbom_dir" "$vuln_dir"
+    local compliance_dir="$scan_dir/compliance"
+    mkdir -p "$sbom_dir" "$vuln_dir" "$compliance_dir"
 
     echo "Output: $scan_dir"
     echo ""
@@ -147,6 +149,19 @@ main() {
             generate_report "$name" "$json_file" "$vuln_dir/${name}-vulnerability-report.md" "$url"
         fi
 
+        # Run compliance check against SBOM
+        local sbom_file="$sbom_dir/${name}-sbom.cdx.json"
+        local policy_file
+        policy_file="$(cd "$(dirname "$config_file")" && pwd)/compliance-policy.yaml"
+        if [[ -f "$sbom_file" ]] && [[ -f "$policy_file" ]]; then
+            echo "  Checking compliance..."
+            local compliance_json
+            compliance_json=$(check_project_compliance "$name" "$sbom_file" "$policy_file" "$compliance_dir/${name}-compliance-report.md")
+            if [[ -n "$compliance_json" ]]; then
+                echo "$compliance_json" > "$compliance_dir/${name}-compliance-summary.json"
+            fi
+        fi
+
         # Check for critical/high
         if [[ -f "$json_file" ]]; then
             local crit high
@@ -166,6 +181,12 @@ main() {
     if [[ "$fmt_summary" == "true" ]]; then
         echo "Generating portfolio summary..."
         generate_summary "$scan_dir" "$scan_dir/portfolio-summary.md" "$config_json"
+    fi
+
+    # Generate portfolio compliance summary
+    if [[ -d "$compliance_dir" ]] && ls "$compliance_dir"/*-compliance-summary.json >/dev/null 2>&1; then
+        echo "Generating compliance summary..."
+        generate_compliance_summary "$scan_dir" "$compliance_dir/portfolio-compliance-summary.md"
     fi
 
     # Generate changelog (diff against previous scan)

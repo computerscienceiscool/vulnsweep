@@ -1,0 +1,138 @@
+# compliance-policy.yaml
+# License and export control policy for vulnsweep compliance checks.
+# Maintain this in a shared repo so all teams use the same rules.
+
+# --- License Policy ---
+
+licenses:
+  # Approved licenses — no action needed
+  approved:
+    - MIT
+    - ISC
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - BlueOak-1.0.0
+    - Unlicense
+    - CC0-1.0
+    - 0BSD
+    - Python-2.0
+    - Zlib
+
+  # Restricted licenses — flag for review, may be incompatible with
+  # proprietary or government use
+  restricted:
+    - GPL-2.0-only
+    - GPL-2.0-or-later
+    - GPL-3.0-only
+    - GPL-3.0-or-later
+    - AGPL-3.0-only
+    - AGPL-3.0-or-later
+    - SSPL-1.0
+    - BUSL-1.1
+    - CC-BY-NC-4.0
+    - CC-BY-NC-SA-4.0
+    - Hippocratic-2.1
+    - Hippocratic-3.0
+
+  # Copyleft licenses — not necessarily restricted, but require careful
+  # review of how the dependency is linked/used
+  copyleft_warning:
+    - LGPL-2.1-only
+    - LGPL-2.1-or-later
+    - LGPL-3.0-only
+    - LGPL-3.0-or-later
+    - MPL-2.0
+    - EPL-1.0
+    - EPL-2.0
+    - CDDL-1.0
+    - CDDL-1.1
+
+# --- Export Control Policy ---
+# Packages matching these patterns are flagged for export control review.
+# This does NOT make a legal determination — it surfaces packages that
+# likely involve cryptography so a compliance reviewer can classify them
+# under EAR/BIS.
+
+export_control:
+  # Package name patterns (case-insensitive substring match)
+  name_patterns:
+    - crypto
+    - cipher
+    - sha256
+    - sha512
+    - sha-
+    - sha1
+    - sha2
+    - sha3
+    - hash
+    - hashes
+    - aes
+    - rsa
+    - ecdsa
+    - ecdh
+    - ed25519
+    - curve25519
+    - x25519
+    - chacha
+    - argon2
+    - bcrypt
+    - scrypt
+    - pbkdf
+    - hmac
+    - tls
+    - ssl
+    - gpg
+    - pgp
+    - nacl
+    - tweetnacl
+    - noble
+    - secp256k1
+    - elliptic
+    - bs58check
+    - openpgp
+
+  # Known crypto packages (exact name match, case-sensitive)
+  # Add packages here that don't match name patterns but contain crypto
+  known_packages:
+    - "@noble/hashes"
+    - "@noble/curves"
+    - "@noble/ed25519"
+    - fast-sha256
+    - bs58check
+    - tweetnacl
+    - tweetnacl-util
+    - libsodium
+    - libsodium-wrappers
+    - sodium-native
+    - node-forge
+    - elliptic
+    - secp256k1
+    - browserify-sign
+    - browserify-cipher
+    - create-hash
+    - create-hmac
+    - diffie-hellman
+    - public-encrypt
+    - randomfill
+    - crypto-browserify
+
+# --- Use Restrictions ---
+# These cannot be fully automated. Packages flagged here require manual
+# legal review. Add entries as your team reviews packages.
+#
+# Format:
+#   - name: "package-name"
+#     restriction: "Description of the restriction"
+#     status: "approved | under-review | restricted"
+#     reviewer: "Name"
+#     date: "YYYY-MM-DD"
+#
+# Example:
+#   - name: "some-package"
+#     restriction: "Commons Clause — cannot sell as a service"
+#     status: "under-review"
+#     reviewer: "Jane Doe"
+#     date: "2026-03-01"
+
+use_restrictions: []

@@ -18,6 +18,7 @@ generate_summary() {
     local critical_highlights=""
     local topdeps_file
     topdeps_file=$(mktemp)
+    local incomplete_sboms=""
 
     for json_file in "$json_dir"/*-trivy.json; do
         [[ -f "$json_file" ]] || continue
@@ -44,16 +45,26 @@ generate_summary() {
             status="PASS"; emoji="✅"; pass_count=$((pass_count + 1))
         fi
 
+        local sbom_flag=""
+        if [[ -f "$scan_dir/SBOM/${name}.sbom-incomplete" ]]; then
+            sbom_flag=" ⚠️🔍"
+            incomplete_sboms+="- **$name**: SBOM was empty — lockfile missing or dependencies not detected. Vulnerability results may be incomplete.\n"
+        fi
+
+
         # Link to the per-project vulnerability report
         local name_display="[$name](vulnerability-scans/${name}-vulnerability-report.md)"
-
-        project_rows+="| $name_display | $emoji $status | $critical | $high | $medium | $low | $total |\n"
+        project_rows+="| $name_display | $emoji $status$sbom_flag | $critical | $high | $medium | $low | $total |\n"
 
         if (( critical > 0 )); then
             local crit_cves
             crit_cves=$(jq -r '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID] | unique | join(", ")' "$json_file")
             critical_highlights+="- **$name**: $crit_cves\n"
         fi
+        
+
+
+
 
         # Append vulnerable deps to temp file
         jq -r '
@@ -93,6 +104,17 @@ generate_summary() {
         echo "|---------|--------|----------|------|--------|-----|-------|"
         echo -e "$project_rows"
 
+        if [[ -n "$incomplete_sboms" ]]; then
+            echo ""
+            echo "## ⚠️ Incomplete SBOMs"
+            echo ""
+            echo "The following projects had empty SBOMs. This typically means lockfiles"
+            echo "are not committed to the repo (e.g. package-lock.json in .gitignore)."
+            echo "Vulnerability counts for these projects may be understated."
+            echo ""
+            echo -e "$incomplete_sboms"
+        fi
+
         if [[ -n "$critical_highlights" ]]; then
             echo ""
             echo "## Critical Vulnerability Highlights"
@@ -127,6 +149,9 @@ generate_summary() {
         fi
         if (( warn_count > 0 )); then
             echo "- Review MEDIUM/LOW vulnerabilities in warning projects for potential upgrades."
+        fi
+        if [[ -n "$incomplete_sboms" ]]; then
+            echo "- Projects with incomplete SBOMs should commit lockfiles or add pre-scan dependency install steps."
         fi
         if (( pass_count == total_projects )); then
             echo "- All projects are clean. Continue monitoring for newly disclosed CVEs."
