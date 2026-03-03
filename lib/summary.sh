@@ -113,7 +113,15 @@ generate_summary() {
             echo ""
             echo "| Package | CVE Count | Max Severity |"
             echo "|---------|-----------|--------------|"
-            sort -t$'\t' -k2 -rn "$topdeps_file" | head -10 | while IFS=$'\t' read -r pkg count sev; do
+            awk -F'\t' '{
+                counts[$1] += $2
+                # Track max severity (lowest number = worst)
+                split("CRITICAL HIGH MEDIUM LOW UNKNOWN", order, " ")
+                for (i=1; i<=5; i++) rank[order[i]] = i
+                if (!($1 in best) || rank[$3] < rank[best[$1]]) best[$1] = $3
+            } END {
+                for (pkg in counts) printf "%s\t%d\t%s\n", pkg, counts[pkg], best[pkg]
+            }' "$topdeps_file" | sort -t$'\t' -k2 -rn | head -10 | while IFS=$'\t' read -r pkg count sev; do
                 echo "| $pkg | $count | $sev |"
             done
         fi

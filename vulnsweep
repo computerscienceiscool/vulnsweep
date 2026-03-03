@@ -79,7 +79,7 @@ main() {
 
     # Resolve output_base to absolute path relative to config file location
     if [[ "$output_base" != /* ]]; then
-        output_base="$(cd "$(dirname "$config_file")" && pwd)/$output_base"
+        output_base="$(cd "$(dirname "$config_file")" && pwd)/${output_base#./}"
     fi
 
     # If git is enabled and output dir doesn't exist, shallow clone the results repo
