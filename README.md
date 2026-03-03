@@ -2,7 +2,7 @@
 
 Portfolio vulnerability scanner powered by Trivy. Scans multiple Git repositories by URL, generates SBOMs, vulnerability reports, and a changelog showing what changed since the last scan.
 
-No repos are cloned to your machine — Trivy handles everything remotely.
+Repos are scanned remotely by default. If a remote SBOM comes back empty (common when lockfiles aren't committed), vulnsweep falls back to a shallow clone with dependency install to get accurate results.
 
 ## Requirements
 
@@ -60,7 +60,12 @@ output:
     project_report: true    # Markdown vulnerability report per project
     portfolio_summary: true # Consolidated markdown summary
     changelog: true         # What changed since last scan
+    compliance: true        # Per-project and portfolio compliance reports
 ```
+
+### Compliance Policy
+
+When `compliance: true` is set, vulnsweep checks each project's SBOM against a policy file. Place `compliance-policy.yaml` in the same directory as your config file. See `compliance-policy.yaml` for the full format.
 
 ### Git Integration
 
@@ -89,6 +94,10 @@ security-audit/
 │   │   ├── my-project-trivy.json        # Raw Trivy JSON (used for diffing)
 │   │   ├── my-project-vulnerability-report.md  # Human-readable report
 │   │   └── ...
+│   ├── compliance/
+│   │   ├── my-project-compliance-report.md     # Per-project compliance report
+│   │   ├── my-project-compliance-summary.json  # Machine-readable summary
+│   │   └── portfolio-compliance-summary.md     # Portfolio-wide compliance
 │   ├── portfolio-summary.md             # Status table across all projects
 │   └── changelog.md                     # What changed since last scan
 ├── 030226-2/                            # Second scan same day
@@ -112,6 +121,12 @@ Human-readable markdown report for one project. Contains:
 
 **Portfolio summary** (`portfolio-summary.md`)
 Status table across all projects showing PASS/WARN/FAIL, vulnerability counts by severity, critical highlights, and the most common vulnerable dependencies.
+
+**Per-project compliance report** (`compliance/<name>-compliance-report.md`)
+Checks the project's SBOM against the compliance policy. Reports banned licenses, blocked packages, and required dependency violations.
+
+**Portfolio compliance summary** (`compliance/portfolio-compliance-summary.md`)
+Aggregated compliance status across all projects.
 
 **Changelog** (`changelog.md`)
 The most important output. Compares the current scan against the previous one and shows:
