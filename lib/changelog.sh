@@ -78,7 +78,8 @@ generate_changelog() {
             } END {
                 for (key in projects) {
                     split(key, parts, "|")
-                    printf "| %s | %s | %s | %s |\n", parts[1], parts[2], parts[3], projects[key]
+                    gsub(/ /, "", parts[1])
+                    printf "| [%s](https://nvd.nist.gov/vuln/detail/%s) | %s | %s | %s |\n", parts[1], parts[1], parts[2], parts[3], projects[key]
                 }
             }' | sort -t'|' -k3,3
             echo ""
@@ -100,7 +101,8 @@ generate_changelog() {
             } END {
                 for (key in projects) {
                     split(key, parts, "|")
-                    printf "| %s | %s | %s | %s |\n", parts[1], parts[2], parts[3], projects[key]
+                    gsub(/ /, "", parts[1])
+                    printf "| [%s](https://nvd.nist.gov/vuln/detail/%s) | %s | %s | %s |\n", parts[1], parts[1], parts[2], parts[3], projects[key]
                 }
             }' | sort -t'|' -k3,3
             echo ""

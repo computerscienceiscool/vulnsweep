@@ -58,7 +58,7 @@ generate_summary() {
 
         if (( critical > 0 )); then
             local crit_cves
-            crit_cves=$(jq -r '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID] | unique | join(", ")' "$json_file")
+            crit_cves=$(jq -r '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "CRITICAL") | .VulnerabilityID] | unique | map("[\(.)](https://nvd.nist.gov/vuln/detail/\(.))") | join(", ")' "$json_file")
             critical_highlights+="- **$name**: $crit_cves\n"
         fi
         

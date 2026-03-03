@@ -81,7 +81,7 @@ generate_report() {
                     elif .Severity == "LOW" then 3
                     else 4 end
                 )[] |
-                    "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "N/A") | \(.Title // "N/A" | gsub("[\\n\\r]"; " ") | if length > 60 then .[:60] + "..." else . end) |"
+                    "| [\(.VulnerabilityID)](https://nvd.nist.gov/vuln/detail/\(.VulnerabilityID)) | \(.Severity) | \(.PkgName) | \(.InstalledVersion) | \(.FixedVersion // "N/A") | \(.Title // "N/A" | gsub("[\\n\\r]"; " ") | if length > 60 then .[:60] + "..." else . end) |"
                 ),
                 ""
             ' "$json_file"
