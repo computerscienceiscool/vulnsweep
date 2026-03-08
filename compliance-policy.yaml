@@ -18,26 +18,12 @@ licenses:
     - 0BSD
     - Python-2.0
     - Zlib
-
-  # Restricted licenses — flag for review, may be incompatible with
-  # proprietary or government use
-  restricted:
     - GPL-2.0-only
     - GPL-2.0-or-later
     - GPL-3.0-only
     - GPL-3.0-or-later
     - AGPL-3.0-only
     - AGPL-3.0-or-later
-    - SSPL-1.0
-    - BUSL-1.1
-    - CC-BY-NC-4.0
-    - CC-BY-NC-SA-4.0
-    - Hippocratic-2.1
-    - Hippocratic-3.0
-
-  # Copyleft licenses — not necessarily restricted, but require careful
-  # review of how the dependency is linked/used
-  copyleft_warning:
     - LGPL-2.1-only
     - LGPL-2.1-or-later
     - LGPL-3.0-only
@@ -48,11 +34,37 @@ licenses:
     - CDDL-1.0
     - CDDL-1.1
 
+  # Restricted licenses — not compatible with open source distribution
+  # or carry non-commercial/use restrictions
+  restricted:
+    - SSPL-1.0
+    - BUSL-1.1
+    - CC-BY-NC-4.0
+    - CC-BY-NC-SA-4.0
+    - Hippocratic-2.1
+    - Hippocratic-3.0
+
 # --- Export Control Policy ---
 # Packages matching these patterns are flagged for export control review.
+#
 # This does NOT make a legal determination — it surfaces packages that
 # likely involve cryptography so a compliance reviewer can classify them
-# under EAR/BIS.
+# under EAR/BIS (Bureau of Industry and Security).
+#
+# Background: Since Clinton's 1998 executive order demilitarized strong
+# cryptography, this area has been a legal gray zone. In practice, crypto
+# libraries are ubiquitous in open source and GitHub builds binaries for
+# them routinely without enforcement action. BIS scrutiny is most likely
+# for large commercial software providers (think: shipping an OS or
+# office suite), not small internal tools.
+#
+# The one edge case worth thinking through: if the software runs on a
+# distributed grid with nodes in ITAR-restricted countries, whether a
+# compiled WebAssembly module containing crypto can legally transit to
+# those nodes is an open question. For now, flag for review — don't block.
+#
+# This is intended for use by a compliance reviewer: typically a software
+# person with legal background, or a paralegal with software background.
 
 export_control:
   # Package name patterns (case-insensitive substring match)
