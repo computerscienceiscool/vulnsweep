@@ -55,6 +55,9 @@ repos:
   - name: decomk
     url: https://github.com/stevegt/decomk
 
+  - name: mahjong
+    url: https://github.com/computerscienceiscool/mahjong
+
   - name: mob-consensus
     url: https://github.com/stevegt/mob-consensus
 
