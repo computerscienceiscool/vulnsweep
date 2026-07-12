@@ -55,14 +55,53 @@ generate_changelog() {
 
     # Count unique new/fixed CVEs (deduplicated across projects)
     local new_cve_count fixed_cve_count
-    new_cve_count=$(echo "$new_vulns" | grep -c '|' 2>/dev/null || echo 0)
-    fixed_cve_count=$(echo "$fixed_vulns" | grep -c '|' 2>/dev/null || echo 0)
+    new_cve_count=$(echo "$new_vulns" | grep -c '|' 2>/dev/null || true)
+    fixed_cve_count=$(echo "$fixed_vulns" | grep -c '|' 2>/dev/null || true)
+
+    # CVEs that entered CISA KEV since the last scan (needs enrichment on both sides)
+    local cur_enrich="$current_dir/enrichment.json"
+    local prev_enrich="$previous_dir/enrichment.json"
+    local entered_kev=""
+    if [[ -f "$cur_enrich" ]] && [[ -f "$prev_enrich" ]]; then
+        entered_kev=$(jq -r --slurpfile prev "$prev_enrich" '
+            to_entries[] |
+            select(.value.kev == true and ((($prev[0][.key] // {}).kev // false) | not)) |
+            .key
+        ' "$cur_enrich" 2>/dev/null)
+    fi
 
     {
         echo "# Vulnerability Scan Changelog — $scan_date"
         echo ""
         echo "Compared against previous scan: $prev_date"
         echo ""
+
+        # Entered KEV: CVEs in this scan now confirmed exploited in the wild.
+        # A CVE you've been carrying for months entering KEV is the alert that matters.
+        if [[ -n "$entered_kev" ]]; then
+            echo "## 🔥 Entered CISA KEV Since Last Scan"
+            echo ""
+            echo "These CVEs in your portfolio are now confirmed exploited in the wild. **Patch immediately.**"
+            echo ""
+            echo "| CVE | Severity | Library | Projects Affected | In KEV Since |"
+            echo "|-----|----------|---------|-------------------|--------------|"
+            while IFS= read -r kev_cve; do
+                [[ -z "$kev_cve" ]] && continue
+                local kev_date
+                kev_date=$(jq -r --arg c "$kev_cve" '(.[$c].kev_date_added // "—")' "$cur_enrich")
+                echo "$cur_cves" | awk -F'|' -v cve="$kev_cve" -v date="$kev_date" '$1 == cve {
+                    key = $1 "|" $2 "|" $3
+                    if (key in projects) projects[key] = projects[key] ", " $4
+                    else projects[key] = $4
+                } END {
+                    for (key in projects) {
+                        split(key, parts, "|")
+                        printf "| [%s](https://nvd.nist.gov/vuln/detail/%s) | %s | %s | %s | %s |\n", parts[1], parts[1], parts[2], parts[3], projects[key], date
+                    }
+                }'
+            done <<< "$entered_kev"
+            echo ""
+        fi
 
         # New vulnerabilities
         echo "## New Vulnerabilities ($new_cve_count)"

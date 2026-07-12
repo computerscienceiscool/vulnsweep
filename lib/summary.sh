@@ -16,9 +16,16 @@ generate_summary() {
 
     local project_rows=""
     local critical_highlights=""
-    local topdeps_file
+    local topdeps_file kev_file epss_file
     topdeps_file=$(mktemp)
+    kev_file=$(mktemp)
+    epss_file=$(mktemp)
     local incomplete_sboms=""
+    local total_secrets=0
+    local total_misconfigs=0
+
+    local enrich_file="$scan_dir/enrichment.json"
+    [[ -f "$enrich_file" ]] || enrich_file=""
 
     for json_file in "$json_dir"/*-trivy.json; do
         [[ -f "$json_file" ]] || continue
@@ -34,15 +41,33 @@ generate_summary() {
         low=$(jq '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "LOW")] | length' "$json_file")
         total=$(jq '[.Results[]? | .Vulnerabilities[]?] | length' "$json_file")
 
+        local secrets misconfigs
+        secrets=$(jq '[.Results[]? | .Secrets[]?] | length' "$json_file")
+        misconfigs=$(jq '[.Results[]? | .Misconfigurations[]? | select(.Status != "PASS")] | length' "$json_file")
+        total_secrets=$((total_secrets + secrets))
+        total_misconfigs=$((total_misconfigs + misconfigs))
+
         local status emoji
-        if (( critical > 0 )); then
+        if (( critical > 0 || high > 0 || secrets > 0 )); then
             status="FAIL"; emoji="❌"; fail_count=$((fail_count + 1))
-        elif (( high > 0 )); then
-            status="FAIL"; emoji="❌"; fail_count=$((fail_count + 1))
-        elif (( medium > 0 || low > 0 )); then
+        elif (( medium > 0 || low > 0 || misconfigs > 0 )); then
             status="WARN"; emoji="⚠️"; warn_count=$((warn_count + 1))
         else
             status="PASS"; emoji="✅"; pass_count=$((pass_count + 1))
+        fi
+
+        # Collect exploitation intel rows (KEV + high-EPSS) for portfolio sections
+        if [[ -n "$enrich_file" ]]; then
+            jq -r --arg proj "$name" --slurpfile enr "$enrich_file" '
+                .Results[]? | .Vulnerabilities[]? | ($enr[0][.VulnerabilityID] // {}) as $e |
+                select($e.kev == true) |
+                "\(.VulnerabilityID)\t\(.Severity)\t\(.PkgName)\t\($proj)\t\($e.kev_date_added // "—")\(if $e.kev_ransomware then " (ransomware)" else "" end)"
+            ' "$json_file" 2>/dev/null | sort -u >> "$kev_file"
+            jq -r --arg proj "$name" --slurpfile enr "$enrich_file" '
+                .Results[]? | .Vulnerabilities[]? | ($enr[0][.VulnerabilityID] // {}) as $e |
+                select($e.kev != true and ($e.epss // 0) >= 0.5 and (.Severity == "CRITICAL" or .Severity == "HIGH")) |
+                "\(.VulnerabilityID)\t\($e.epss * 1000 | round / 10)\t\(.Severity)\t\(.PkgName)\t\($proj)"
+            ' "$json_file" 2>/dev/null | sort -u >> "$epss_file"
         fi
 
         local sbom_flag=""
@@ -54,7 +79,7 @@ generate_summary() {
 
         # Link to the per-project vulnerability report
         local name_display="[$name](vulnerability-scans/${name}-vulnerability-report.md)"
-        project_rows+="| $name_display | $emoji $status$sbom_flag | $critical | $high | $medium | $low | $total |\n"
+        project_rows+="| $name_display | $emoji $status$sbom_flag | $critical | $high | $medium | $low | $total | $secrets | $misconfigs |\n"
 
         if (( critical > 0 )); then
             local crit_cves
@@ -123,15 +148,77 @@ generate_summary() {
         echo "| ✅ PASS | $pass_count |"
         echo "| ⚠️ WARN | $warn_count |"
         echo "| ❌ FAIL | $fail_count |"
+        if [[ -s "$kev_file" ]]; then
+            local kev_unique
+            kev_unique=$(cut -f1 "$kev_file" | sort -u | wc -l)
+            echo "| 🔥 Actively Exploited CVEs | $kev_unique |"
+        fi
+        if (( total_secrets > 0 )); then
+            echo "| 🔑 Secrets | $total_secrets |"
+        fi
+        if (( total_misconfigs > 0 )); then
+            echo "| 🔧 Misconfigurations | $total_misconfigs |"
+        fi
         if [[ "$compliance_status" != "none" ]]; then
             echo "| $compliance_emoji Compliance | $compliance_label |"
         fi
         echo ""
+
+        # Exploitation intel first — this is the "3 that matter" section
+        if [[ -s "$kev_file" ]]; then
+            echo "## 🔥 Actively Exploited Vulnerabilities (CISA KEV)"
+            echo ""
+            echo "Confirmed exploited in the wild. **Patch these first.**"
+            echo ""
+            echo "| CVE | Severity | Package | Projects Affected | In KEV Since |"
+            echo "|-----|----------|---------|-------------------|--------------|"
+            awk -F'\t' '{
+                key = $1 "\t" $2 "\t" $3 "\t" $5
+                if (key in projects) projects[key] = projects[key] ", " $4
+                else projects[key] = $4
+            } END {
+                for (key in projects) {
+                    split(key, p, "\t")
+                    printf "| [%s](https://nvd.nist.gov/vuln/detail/%s) | %s | %s | %s | %s |\n", p[1], p[1], p[2], p[3], projects[key], p[4]
+                }
+            }' "$kev_file" | sort
+            echo ""
+        fi
+
+        if [[ -s "$epss_file" ]]; then
+            echo "## ⚠️ High Exploitation Probability (EPSS ≥ 0.5)"
+            echo ""
+            echo "Critical/high CVEs with a ≥50% predicted chance of exploitation in the next 30 days."
+            echo ""
+            echo "| CVE | EPSS | Severity | Package | Projects Affected |"
+            echo "|-----|------|----------|---------|-------------------|"
+            awk -F'\t' '{
+                key = $1 "\t" $2 "\t" $3 "\t" $4
+                if (key in projects) projects[key] = projects[key] ", " $5
+                else projects[key] = $5
+            } END {
+                for (key in projects) {
+                    split(key, p, "\t")
+                    printf "%s\t| [%s](https://nvd.nist.gov/vuln/detail/%s) | %s%% | %s | %s | %s |\n", p[2], p[1], p[1], p[2], p[3], p[4], projects[key]
+                }
+            }' "$epss_file" | sort -rn | cut -f2-
+            echo ""
+        fi
+
         echo "## Project Status"
         echo ""
-        echo "| Project | Status | Critical | High | Medium | Low | Total |"
-        echo "|---------|--------|----------|------|--------|-----|-------|"
+        echo "| Project | Status | Critical | High | Medium | Low | Total | Secrets | Misconfig |"
+        echo "|---------|--------|----------|------|--------|-----|-------|---------|-----------|"
         echo -e "$project_rows"
+
+        if (( total_secrets > 0 )); then
+            echo ""
+            echo "## 🔑 Secrets Detected"
+            echo ""
+            echo "Leaked credentials found in $((total_secrets)) location(s). See the per-project"
+            echo "reports for file and line numbers. **Rotate affected credentials** — they live"
+            echo "on in git history even after removal."
+        fi
 
         if [[ -n "$incomplete_sboms" ]]; then
             echo ""
@@ -181,6 +268,12 @@ generate_summary() {
         echo ""
         echo "## Recommendations"
         echo ""
+        if [[ -s "$kev_file" ]]; then
+            echo "- **Immediate:** Patch the actively exploited (KEV) CVEs above — these are being exploited in the wild right now."
+        fi
+        if (( total_secrets > 0 )); then
+            echo "- **Immediate:** Rotate the leaked credentials flagged in the secrets sections."
+        fi
         if (( fail_count > 0 )); then
             echo "- Address CRITICAL and HIGH vulnerabilities in failing projects as a priority."
         fi
@@ -196,5 +289,5 @@ generate_summary() {
         echo "- Run \`vulnsweep\` regularly to catch newly disclosed vulnerabilities."
     } > "$output_file"
 
-    rm -f "$topdeps_file"
+    rm -f "$topdeps_file" "$kev_file" "$epss_file"
 }

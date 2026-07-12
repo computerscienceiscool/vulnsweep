@@ -21,3 +21,5 @@
 - 007 - Changelog generation (diff current vs previous scan)
 - 008 - Output directory management (date-stamped dirs, latest symlink)
 - 009 - Exit code handling (0 clean, 1 new critical/high)
+- 017 - EPSS + KEV enrichment (CISA KEV catalog + FIRST.org EPSS scores per CVE; priority triage in reports, "actively exploited" portfolio section, "entered KEV" changelog alerts)
+- 018 - Secret + misconfig + license scanners (trivy --scanners vuln,secret,misconfig,license; new report sections for leaked credentials, IaC misconfigurations, and license findings)

@@ -50,6 +50,11 @@ get_repo_url() {
     echo "$config_json" | jq -r ".repos[$index].url"
 }
 
+get_scanners() {
+    local config_json="$1"
+    echo "$config_json" | jq -r '(.scanner.scanners // ["vuln","secret","misconfig","license"]) | join(",")'
+}
+
 get_format_flag() {
     local config_json="$1"
     local format="$2"

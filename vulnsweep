@@ -13,6 +13,7 @@ source "$SCRIPT_DIR/lib/report.sh"
 source "$SCRIPT_DIR/lib/summary.sh"
 source "$SCRIPT_DIR/lib/changelog.sh"
 source "$SCRIPT_DIR/lib/compliance.sh"
+source "$SCRIPT_DIR/lib/enrich.sh"
 
 usage() {
     cat <<'EOF'
@@ -120,8 +121,27 @@ main() {
     echo "Output: $scan_dir"
     echo ""
 
+    # Trivy scanners to run (vuln, secret, misconfig, license by default)
+    local scanners
+    scanners=$(get_scanners "$config_json")
+
+    # Fetch the CISA KEV catalog once per run for EPSS/KEV enrichment
+    local fmt_enrichment enrich_file="" kev_map_file=""
+    fmt_enrichment=$(get_format_flag "$config_json" "enrichment")
+    if [[ "$fmt_enrichment" == "true" ]]; then
+        echo "Fetching CISA KEV catalog..."
+        kev_map_file=$(mktemp)
+        if ! fetch_kev_map "$kev_map_file"; then
+            echo "WARNING: KEV catalog unavailable — enriching with EPSS only" >&2
+            echo '{}' > "$kev_map_file"
+        fi
+        enrich_file="$scan_dir/enrichment.json"
+        echo ""
+    fi
+
     # Track scan results for exit code
     local has_critical_high=0
+    local has_secrets=0
     local failed_repos=0
 
     # Process each repo
@@ -133,20 +153,27 @@ main() {
         echo "[$((i+1))/$repo_count] $name"
 
         # Scan remote repo directly (no cloning)
-        if ! scan_repo "$name" "$url" "$sbom_dir" "$vuln_dir"; then
+        if ! scan_repo "$name" "$url" "$sbom_dir" "$vuln_dir" "$scanners"; then
             echo "  SKIPPED (scan failed)"
             failed_repos=$((failed_repos + 1))
             echo ""
             continue
         fi
 
-        # Generate per-project report
         local json_file="$vuln_dir/${name}-trivy.json"
+
+        # Enrich findings with EPSS scores and KEV flags
+        if [[ -n "$enrich_file" ]] && [[ -f "$json_file" ]]; then
+            echo "  Enriching with EPSS/KEV data..."
+            enrich_project "$json_file" "$kev_map_file" "$enrich_file" || true
+        fi
+
+        # Generate per-project report
         local fmt_report
         fmt_report=$(get_format_flag "$config_json" "project_report")
         if [[ "$fmt_report" == "true" ]] && [[ -f "$json_file" ]]; then
             echo "  Generating report..."
-            generate_report "$name" "$json_file" "$vuln_dir/${name}-vulnerability-report.md" "$url"
+            generate_report "$name" "$json_file" "$vuln_dir/${name}-vulnerability-report.md" "$url" "$enrich_file"
         fi
 
         # Run compliance check against SBOM
@@ -162,13 +189,17 @@ main() {
             fi
         fi
 
-        # Check for critical/high
+        # Check for critical/high vulns and leaked secrets
         if [[ -f "$json_file" ]]; then
-            local crit high
+            local crit high secrets
             crit=$(jq '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "CRITICAL")] | length' "$json_file")
             high=$(jq '[.Results[]? | .Vulnerabilities[]? | select(.Severity == "HIGH")] | length' "$json_file")
+            secrets=$(jq '[.Results[]? | .Secrets[]?] | length' "$json_file")
             if (( crit > 0 || high > 0 )); then
                 has_critical_high=1
+            fi
+            if (( secrets > 0 )); then
+                has_secrets=1
             fi
         fi
 
@@ -217,6 +248,9 @@ main() {
         _git_commit_results "$output_base" "$scan_date" "$config_json"
     fi
 
+    # Clean up KEV temp file
+    [[ -n "$kev_map_file" ]] && rm -f "$kev_map_file"
+
     # Summary
     echo ""
     echo "=== Scan Complete ==="
@@ -227,8 +261,9 @@ main() {
         echo "WARNING: $failed_repos repo(s) failed to scan"
     fi
 
-    if (( has_critical_high )); then
-        echo "RESULT: CRITICAL or HIGH vulnerabilities found"
+    if (( has_critical_high )) || (( has_secrets )); then
+        (( has_critical_high )) && echo "RESULT: CRITICAL or HIGH vulnerabilities found"
+        (( has_secrets )) && echo "RESULT: Secrets detected in repository content"
         exit 1
     else
         echo "RESULT: No critical or high vulnerabilities"

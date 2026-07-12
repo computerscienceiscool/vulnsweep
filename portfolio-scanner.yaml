@@ -3,6 +3,11 @@
 scanner:
   tool: trivy
   version: ">=0.69"
+  scanners:                 # trivy scanners to run per repo
+    - vuln                  # CVE scanning
+    - secret                # leaked credentials, keys, tokens
+    - misconfig             # Dockerfile/Terraform/K8s misconfigurations
+    - license               # package license detection
 
 schedule:
   frequency: daily          # daily | weekly | manual
@@ -17,6 +22,7 @@ output:
     portfolio_summary: true # Consolidated markdown summary
     changelog: true         # What changed since last scan
     compliance: true        # Per-project and portfolio compliance reports
+    enrichment: true        # EPSS scores + CISA KEV flags per CVE (needs network)
   git:
     enabled: true
     remote: https://github.com/computerscienceiscool/security-audit  # optional, omit to commit locally only

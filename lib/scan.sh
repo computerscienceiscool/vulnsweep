@@ -6,6 +6,7 @@ scan_repo() {
     local url="$2"
     local sbom_dir="$3"
     local scan_dir="$4"
+    local scanners="${5:-vuln}"
 
     local sbom_file="$sbom_dir/${name}-sbom.cdx.json"
     local json_file="$scan_dir/${name}-trivy.json"
@@ -59,8 +60,8 @@ scan_repo() {
                 touch "$sbom_dir/${name}.sbom-incomplete"
             fi
 
-            echo "  Scanning $name for vulnerabilities (local)..."
-            if ! trivy fs --format json --output "$json_file" --scanners vuln "$clone_dir" 2>"$err_file"; then
+            echo "  Scanning $name (scanners: $scanners, local)..."
+            if ! trivy fs --format json --output "$json_file" --scanners "$scanners" "$clone_dir" 2>"$err_file"; then
                 _report_scan_error "$name" "$url" "$err_file" "vulnerability scan (local)"
                 rm -rf "$clone_dir"
                 rm -f "$err_file"
@@ -81,9 +82,9 @@ scan_repo() {
 
 
 
-    # Vulnerability scan (JSON)
-    echo "  Scanning $name for vulnerabilities..."
-    if ! trivy repo --format json --output "$json_file" --scanners vuln "$url" 2>"$err_file"; then
+    # Vulnerability/secret/misconfig/license scan (JSON)
+    echo "  Scanning $name (scanners: $scanners)..."
+    if ! trivy repo --format json --output "$json_file" --scanners "$scanners" "$url" 2>"$err_file"; then
         _report_scan_error "$name" "$url" "$err_file" "vulnerability scan"
         rm -f "$err_file"
         return 1
